@@ -1,3 +1,7 @@
+# My custom files that i don't want to include in
+.DS_Store
+.idea/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
