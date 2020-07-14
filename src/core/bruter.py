@@ -1,14 +1,45 @@
 #!/usr/bin/env python3
 
+from asyncio import get_event_loop, as_completed
+from functools import wraps
 from getpass import getuser
 from logging import getLogger, INFO, basicConfig
 from pathlib import Path
+from time import time, strftime, gmtime
 from urllib.parse import urlparse
 
+from aiohttp import ClientSession, ClientResponse, ClientConnectionError
 from requests import head, Response
 
 basicConfig(level=INFO)
 logger = getLogger(name="bruter")
+
+
+def timer(function):
+    """
+    Timer that used to count runtime
+    of different functions. Simple.
+    :param function: wrapping function
+    :return: wrapped function
+    """
+
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        print(
+            f"Function '{function.__name__}' is running... Args: {args}, Kwargs: {kwargs}",
+            flush=True,
+        )
+        start = time()
+        result = function(*args, **kwargs)
+        end = time()
+        seconds = round(end - start, 2)
+        print(
+            f"Done in {seconds}s ({str(strftime('%H:%M:%S', gmtime(seconds)))})",
+            flush=True,
+        )
+        return result
+
+    return wrapper
 
 
 def show_function_meta(please_lie_to_me: bool = False) -> callable:
@@ -155,6 +186,7 @@ class ThreadBruter(Bruter):
     Yay, that's cool! But what about deadlocks, race conditions, memory corruptions and so on?
     Are you ready for it?
     """
+
     ...
 
 
@@ -162,14 +194,91 @@ class MultiprocessingBruter(Bruter):
     """
     Are you sure bruh?
     """
+
     ...
 
 
 class AsyncBruter(Bruter):
     """
-    Best case for this task, but unfortunately 'NotImplemented' now
+    Define Asynchronous bruter.
+    Should be best solution.
     """
-    ...
+
+    def __init__(self, *args, **kwargs):
+        """
+        Re-init the base class.
+        Append argument 'results' to class.
+        """
+        super().__init__(*args, **kwargs)
+        self.session = None
+        self.results = []
+
+    @staticmethod
+    async def __check_file(
+        session: ClientSession, file_url: str, filename: str
+    ) -> (ClientResponse or None, str or None, str or None):
+        """
+        Check if file exists or not?
+        :param file_url: URL to check file existence
+        :return: response + checked URL
+        """
+        try:
+            async with await session.head(file_url) as resp:
+                return (
+                    (resp, file_url, filename)
+                    if resp.status == 200
+                    else (None, None, None)
+                )
+        except ClientConnectionError:
+            logger.info("Connection error while trying to access", filename)
+            return None, None, None
+
+    # @show_function_meta()
+    async def __brute(self, host: str = None) -> None:
+        """
+        Async brute directories and files
+        :param host: host to brute
+        :return: None
+        """
+        if not self.fuzz_list:
+            self.open_file()
+        target = urlparse(host or self.host)
+        session = ClientSession()
+        futures = [
+            self.__check_file(
+                session, f"{target.scheme}://{target.hostname}/{filename}", filename
+            )
+            for filename in self.fuzz_list
+        ]
+        for future in as_completed(futures):
+            response, file_url, filename = await future
+            if not response:
+                continue
+            result = (
+                filename or "-",
+                response.status,
+                file_url,
+                response.headers.get("Content-Length"),
+            )
+            self.log(*result)
+            self.process(self.results, *result)
+        await session.close()
+
+    @timer
+    def brute(self, host: str = None) -> None:
+        """
+        Start asyncio event loop
+        """
+        ioloop = get_event_loop()
+        ioloop.run_until_complete(self.__brute(host))
+        ioloop.close()
+
+    def get_results(self) -> list:
+        """
+        Return results from the class instance
+        :return: list of the results
+        """
+        return self.results
 
 
 class SyncBruter(Bruter):
@@ -201,7 +310,8 @@ class SyncBruter(Bruter):
             return None, None
         return response, file_url
 
-    @show_function_meta(please_lie_to_me=False)
+    # @show_function_meta(please_lie_to_me=False)
+    @timer
     def brute(self, host: str = None) -> None:
         """
         Brute directories and files
@@ -215,6 +325,7 @@ class SyncBruter(Bruter):
             response, file_url = self.__check_file(
                 file_url=f"{target.scheme}://{target.hostname}/{filename}"
             )
+
             if not response:
                 continue
             result = (

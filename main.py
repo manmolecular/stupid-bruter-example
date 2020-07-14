@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from src.core.bruter import Bruter, SyncBruter, BruterException
+from src.core.bruter import Bruter, AsyncBruter, BruterException, SyncBruter
 from pprint import pprint
 
 
@@ -14,21 +14,28 @@ def brute_example() -> None:
     Just an example
     :return: None
     """
-    base_bruter = Bruter(host=Values.HOST)
-    print(f"'base_bruter' is {base_bruter}")
+    # base_bruter = Bruter(host=Values.HOST)
+    # print(f"'base_bruter' is {base_bruter}")
+    #
+    # try:
+    #     base_bruter.host = ""
+    # except BruterException as wrong_host:
+    #     print(f"Oops, what are you doing here? Error: {wrong_host}")
 
-    try:
-        base_bruter.host = ""
-    except BruterException as wrong_host:
-        print(f"Oops, what are you doing here? Error: {wrong_host}")
+    # try:
+    #     base_bruter.brute()
+    # except Exception as unexp_error:
+    #     print(f"Something gone wrong: {unexp_error}")
 
-    try:
-        base_bruter.brute()
-    except Exception as unexp_error:
-        print(f"Something gone wrong: {unexp_error}")
+    bruter_async = AsyncBruter(host=Values.HOST, limit=Values.LIMIT)
+    # print(f"'bruter_async' is {bruter_async}")
+
+    bruter_async.brute()
+    results = bruter_async.get_results()
+    pprint(results)
 
     bruter_sync = SyncBruter(host=Values.HOST, limit=Values.LIMIT)
-    print(f"'bruter_sync' is {bruter_sync}")
+    # print(f"'bruter_sync' is {bruter_sync}")
 
     bruter_sync.brute()
     results = bruter_sync.get_results()
